@@ -4,13 +4,16 @@ import random
 from datetime import datetime
 from supabase import create_client, Client
 from ippanel import Client as SMSClient, Error as SMSError
+import os
 
 app = Flask(__name__)
 app.secret_key = 'tiketino_super_secret_key_2025_change_it'
 
+
+
 # === تنظیمات Supabase ===
-SUPABASE_URL = 'https://your-project-id.supabase.co'  # عوض کن
-SUPABASE_KEY = 'your-anon-key'  # عوض کن
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # === تنظیمات فراز اس‌ام‌اس ===
@@ -328,4 +331,5 @@ def process():
         """
 
 if __name__ == '__main__':
+
     app.run(debug=True, port=5000)
