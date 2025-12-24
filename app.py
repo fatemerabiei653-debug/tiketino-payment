@@ -18,10 +18,15 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 
+
+
 # === تنظیمات فراز اس‌ام‌اس ===
 SMS_API_KEY = os.environ.get('SMS_API_KEY')
+if not SMS_API_KEY:
+    print("خطا: SMS_API_KEY در Environment Variables تنظیم نشده!")  # برای لاگ
+
 sms = SMSClient(SMS_API_KEY)
-SENDER_NUMBER = '+983000505'
+SENDER_NUMBER = '+983000505'  # یا خط خودت
 
 # === کیف پول مجازی برای کارت‌ها (در حافظه سرور - تا وقتی سرور روشن باشه حفظ می‌شه) ===
 # فرمت: { "شماره_کارت": موجودی }
@@ -335,4 +340,5 @@ def process():
 if __name__ == '__main__':
 
     app.run(debug=True, port=5000)
+
 
