@@ -1,4 +1,0 @@
-Flask
-supabase
-ippanel
-gunicorn
