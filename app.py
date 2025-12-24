@@ -1,40 +1,12 @@
-from flask import Flask, request, render_template_string, session, jsonify
+from flask import Flask, request, render_template_string, session
 import time
 import random
 from datetime import datetime
-from supabase import create_client, Client
-from ippanel import Client as SMSClient, Error as SMSError
-import os
 
 app = Flask(__name__)
-app.secret_key = 'tiketino_super_secret_key_2025_change_it'
+app.secret_key = 'tiketino_super_secret_key_2025_change_it_to_something_random'
 
-
-
-# === تنظیمات Supabase ===
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-
-
-
-
-# === تنظیمات فراز اس‌ام‌اس ===
-SMS_API_KEY = os.environ.get('SMS_API_KEY')
-if not SMS_API_KEY:
-    print("خطا: SMS_API_KEY در Environment Variables تنظیم نشده!")  # برای لاگ
-
-sms = SMSClient(SMS_API_KEY)
-SENDER_NUMBER = '+983000505'  # یا خط خودت
-
-# === کیف پول مجازی برای کارت‌ها (در حافظه سرور - تا وقتی سرور روشن باشه حفظ می‌شه) ===
-# فرمت: { "شماره_کارت": موجودی }
-VIRTUAL_WALLETS = {}
-
-DEFAULT_BALANCE = 100000  # موجودی پیش‌فرض برای هر کارت جدید
-
-# صفحه پرداخت
+# صفحه پرداخت با رمز پویا داخلی + پر شدن خودکار فیلد
 PAYMENT_FORM = '''
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -72,9 +44,9 @@ PAYMENT_FORM = '''
         input, select { width: 100%; padding: 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         .row { display: flex; gap: 15px; }
         .row > div { flex: 1; }
-        .otp-section { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6; text-align: center; }
+        .otp-section { margin: 20px 0; padding: 15px; background: #f0f8ff; border-radius: 8px; border: 1px solid #bee5eb; text-align: center; }
         #timer { font-size: 18px; color: #d32f2f; font-weight: bold; margin: 10px 0; }
-        #otp-message { text-align: center; margin: 10px 0; font-weight: bold; }
+        .otp-code { font-size: 28px; color: #155724; background: #d4edda; padding: 15px; border-radius: 8px; margin: 15px 0; letter-spacing: 5px; font-family: monospace; }
         .btn { width: 100%; padding: 16px; background: #1976d2; color: white; border: none; border-radius: 8px; font-size: 18px; cursor: pointer; margin-top: 30px; }
         .btn:hover { background: #1565c0; }
         .btn-otp { background: #43a047; padding: 12px; font-size: 16px; }
@@ -92,36 +64,30 @@ PAYMENT_FORM = '''
 
         let timeLeft = 0;
         let timerInterval;
+        let generatedOtp = null;
 
-        function requestOtp() {
-            fetch('/send_otp?user_id={{ user_id }}', { method: 'POST' })
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById('otp-message').innerText = data.message;
-                    document.getElementById('otp-message').style.color = data.status === 'success' ? 'green' : 'red';
+        function generateOtp() {
+            generatedOtp = Math.floor(100000 + Math.random() * 900000);
+            document.getElementById('otp-code-display').innerText = generatedOtp;
+            document.getElementById('otp-code-display').style.display = 'block';
+            document.getElementById('otp-btn').disabled = true;
 
-                    if (data.status === 'success') {
-                        timeLeft = 120;
-                        document.getElementById('timer').innerText = '02:00';
-                        document.getElementById('otp-btn').disabled = true;
-                        document.getElementById('password').disabled = false;
+            timeLeft = 60;
+            document.getElementById('timer').innerText = '01:00';
 
-                        timerInterval = setInterval(() => {
-                            timeLeft--;
-                            let m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
-                            let s = String(timeLeft % 60).padStart(2, '0');
-                            document.getElementById('timer').innerText = m + ':' + s;
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                let m = '00';
+                let s = String(timeLeft).padStart(2, '0');
+                document.getElementById('timer').innerText = m + ':' + s;
 
-                            if (timeLeft <= 0) {
-                                clearInterval(timerInterval);
-                                document.getElementById('timer').innerText = 'مهلت تمام شد';
-                                document.getElementById('otp-btn').disabled = false;
-                                document.getElementById('password').disabled = true;
-                                document.getElementById('password').value = '';
-                            }
-                        }, 1000);
-                    }
-                });
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timer').innerText = 'مهلت تمام شد';
+                    document.getElementById('password').value = generatedOtp;  // پر شدن خودکار فیلد
+                    document.getElementById('otp-btn').disabled = false;
+                }
+            }, 1000);
         }
     </script>
 </head>
@@ -136,11 +102,10 @@ PAYMENT_FORM = '''
 
         <div class="body">
             <form method="POST" action="/process">
-                <input type="hidden" name="user_id" value="{{ user_id }}">
                 <input type="hidden" name="raw_amount" value="{{ raw_amount }}">
                 <input type="hidden" name="order_id" value="{{ order_id }}">
 
-                <label>شماره کارت (هر کارتی دلخواه)</label>
+                <label>شماره کارت</label>
                 <input type="text" name="card_number" maxlength="19" placeholder="1234-5678-9012-3456" oninput="formatCard(this)" required>
 
                 <div class="row">
@@ -160,12 +125,14 @@ PAYMENT_FORM = '''
                 </div>
 
                 <div class="otp-section">
-                    <button type="button" id="otp-btn" class="btn btn-otp" onclick="requestOtp()">دریافت رمز پویا</button>
-                    <p id="otp-message"></p>
+                    <button type="button" id="otp-btn" class="btn btn-otp" onclick="generateOtp()">دریافت رمز پویا</button>
+                    <div id="otp-code-display" class="otp-code" style="display:none;"></div>
                     <div id="timer">ابتدا دکمه را فشار دهید</div>
-                    <label style="margin-top:15px;">رمز دوم یا پویا</label>
-                    <input type="text" name="password" id="password" placeholder="رمز دوم یا کد پویا" maxlength="6" required>
+                    <p style="color:#666; margin-top:15px;">پس از ۶۰ ثانیه، کد به طور خودکار در فیلد زیر وارد می‌شود</p>
                 </div>
+
+                <label>رمز دوم یا پویا (تست ثابت: 123456)</label>
+                <input type="text" name="password" id="password" placeholder="رمز دوم یا کد پویا" maxlength="6" required>
 
                 <button type="submit" class="btn">پرداخت</button>
             </form>
@@ -179,7 +146,7 @@ PAYMENT_FORM = '''
 </html>
 '''
 
-# صفحه رسید پرداخت (بدون تغییر)
+# صفحه رسید پرداخت
 RECEIPT_PAGE = '''
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -244,101 +211,41 @@ RECEIPT_PAGE = '''
 @app.route('/')
 @app.route('/pay/<int:amount>')
 def pay(amount=50000):
-    user_id = request.args.get('user_id', 'test_user')
     order_id = request.args.get('order_id', 'TKT' + str(random.randint(10000, 99999)))
     session.clear()
     return render_template_string(PAYMENT_FORM,
                                  amount=f"{amount:,}".replace(",", "٬"),
                                  raw_amount=amount,
-                                 order_id=order_id,
-                                 user_id=user_id)
-
-@app.route('/send_otp', methods=['POST'])
-def send_otp():
-    user_id = request.args.get('user_id', request.form.get('user_id', 'test_user'))
-
-    try:
-        response = supabase.table('users').select('phone').eq('id', user_id).execute()
-        if not response.data:
-            return jsonify({'status': 'error', 'message': 'کاربر یافت نشد'})
-        phone = response.data[0]['phone']
-    except:
-        return jsonify({'status': 'error', 'message': 'خطا در خواندن شماره از دیتابیس'})
-
-    otp_code = random.randint(100000, 999999)
-    session['otp_code'] = otp_code
-    session['otp_time'] = time.time()
-
-    message = f'رمز پویا Tiketino: {otp_code}\nمعتبر تا ۲ دقیقه'
-
-    try:
-        sms.send(SENDER_NUMBER, [phone], message)
-        return jsonify({'status': 'success', 'message': 'رمز پویا ارسال شد'})
-    except SMSError as e:
-        return jsonify({'status': 'error', 'message': f'خطا: {e.message}'})
-    except:
-        return jsonify({'status': 'error', 'message': 'خطای ارسال پیامک'})
+                                 order_id=order_id)
 
 @app.route('/process', methods=['POST'])
 def process():
-    time.sleep(3)
+    time.sleep(3)  # تأخیر شبیه‌سازی درگاه
 
     raw_amount = int(request.form['raw_amount'])
-    card_number = request.form['card_number'].replace("-", "").replace(" ", "")
     user_password = request.form['password']
 
-    # ایجاد یا گرفتن کیف پول برای این کارت
-    if card_number not in VIRTUAL_WALLETS:
-        VIRTUAL_WALLETS[card_number] = DEFAULT_BALANCE  # ۱۰۰,۰۰۰ تومان پیش‌فرض
-
-    current_balance = VIRTUAL_WALLETS[card_number]
-
-    # قبول رمز ثابت یا پویا
-    valid_password = False
+    # قبول رمز ثابت 123456
     if user_password == "123456":
-        valid_password = True
-    elif ('otp_code' in session and 
-          time.time() - session['otp_time'] <= 120 and 
-          int(user_password) == session['otp_code']):
-        valid_password = True
-
-    if not valid_password:
-        return "<h2 style='text-align:center;color:red;padding:100px;background:white;margin:50px;border-radius:12px;'>رمز اشتباه یا منقضی شده!</h2><a href='/'>تلاش مجدد</a>"
-
-    # چک موجودی
-    if current_balance >= raw_amount:
-        VIRTUAL_WALLETS[card_number] -= raw_amount  # کسر از موجودی
-
-        ref_id = random.randint(100000000000, 999999999999)
-        now = datetime.now()
-        date_persian = now.strftime("%Y/%m/%d")
-        time_str = now.strftime("%H:%M:%S")
-        formatted_amount = f"{raw_amount:,}".replace(",", "٬")
-
-        session.clear()
-
-        return render_template_string(RECEIPT_PAGE,
-                                     amount=formatted_amount,
-                                     ref_id=ref_id,
-                                     order_id=request.form['order_id'],
-                                     date=date_persian,
-                                     time=time_str)
+        valid = True
     else:
-        remaining = f"{current_balance:,}".replace(",", "٬")
-        needed = f"{raw_amount:,}".replace(",", "٬")
-        return f"""
-        <h2 style='text-align:center; color:red; padding:100px; background:white; margin:50px; border-radius:12px;'>
-            موجودی کافی نیست!<br><br>
-            موجودی کیف پول کارت: {remaining} تومان<br>
-            مبلغ درخواستی: {needed} تومان
-        </h2>
-        <div style='text-align:center;'>
-            <a href='/' style='color:#1976d2; font-size:18px;'>تلاش مجدد</a>
-        </div>
-        """
+        valid = False
+
+    if not valid:
+        return "<h2 style='text-align:center;color:red;padding:100px;background:white;margin:50px;border-radius:12px;'>رمز اشتباه است!</h2><a href='/'>تلاش مجدد</a>"
+
+    ref_id = random.randint(100000000000, 999999999999)
+    now = datetime.now()
+    date_persian = now.strftime("%Y/%m/%d")
+    time_str = now.strftime("%H:%M:%S")
+    formatted_amount = f"{raw_amount:,}".replace(",", "٬")
+
+    return render_template_string(RECEIPT_PAGE,
+                                 amount=formatted_amount,
+                                 ref_id=ref_id,
+                                 order_id=request.form['order_id'],
+                                 date=date_persian,
+                                 time=time_str)
 
 if __name__ == '__main__':
-
     app.run(debug=True, port=5000)
-
-
