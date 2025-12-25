@@ -2,6 +2,8 @@ from flask import Flask, request, render_template_string, session, jsonify
 import time
 import random
 from datetime import datetime
+from datetime import timedelta, timezone
+
 
 app = Flask(__name__)
 app.secret_key = 'tiketino_secret_key_2025_change_it'
@@ -221,8 +223,12 @@ RECEIPT_PAGE = '''
 '''
 
 @app.route('/')
+@app.route('/pay')
 @app.route('/pay/<int:amount>')
-def pay(amount=50000):
+def pay(amount=None):
+    if amount is None:
+        amount = request.args.get('amount', 50000, type=int)
+
     order_id = request.args.get('order_id', 'TKT' + str(random.randint(10000, 99999)))
     session.clear()
     return render_template_string(
@@ -236,6 +242,7 @@ def pay(amount=50000):
 def request_otp():
     otp_code = random.randint(100000, 999999)
     session['otp_code'] = otp_code
+    session['otp_time'] = time.time()
     return jsonify({"otp": otp_code})
 
 @app.route('/process', methods=['POST'])
@@ -253,8 +260,11 @@ def process():
     valid = False
     if user_password == "123456":
         valid = True
-    elif 'otp_code' in session and user_password == str(session['otp_code']):
+    elif 'otp_code' in session:
+        otp_age = time.time() - session.get('otp_time', 0)
+    if user_password == str(session['otp_code']) and otp_age <= 15:
         valid = True
+
 
     if not valid:
         return "<h2 style='text-align:center;color:red;padding:100px;background:white;margin:50px;border-radius:12px;'>رمز اشتباه است!</h2><a href='/'>تلاش مجدد</a>"
@@ -265,7 +275,8 @@ def process():
     VIRTUAL_WALLETS[card_number] -= raw_amount
 
     ref_id = random.randint(100000000000, 999999999999)
-    now = datetime.now()
+    now = datetime.now(timezone.utc) + timedelta(hours=3, minutes=30)
+
 
     formatted_amount = f"{raw_amount:,}".replace(",", "٬")
 
