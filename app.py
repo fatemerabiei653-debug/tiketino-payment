@@ -205,7 +205,7 @@ RECEIPT_PAGE = '''
             <p style="margin:10px 0 0; font-size:18px;">نرم‌افزار Tiketino</p>
         </div>
         <div class="body">
-            <div class="row"><span class="label">مبلغ پرداختی:</span><span class="value">{{ amount }} تومان</span></div>
+           <span class="value">مبلغ در خواستی شما با موفقیت پرداخت شد :)</span>
             <div class="row"><span class="label">شماره پیگیری:</span><span class="value">{{ ref_id }}</span></div>
             <div class="row"><span class="label">شماره سفارش:</span><span class="value">{{ order_id }}</span></div>
             <div class="row"><span class="label">پذیرنده:</span><span class="value">شرکت حمل و نقل اتوبوسرانی Tiketino</span></div>
@@ -293,3 +293,4 @@ def process():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
